@@ -18,12 +18,15 @@ package raft
 //
 
 import (
-	//	"bytes"
+	"bytes"
+	// "crypto/rand"
+	"math/big"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	//	"6.824/labgob"
+	"6.824/labgob"
 	"6.824/labrpc"
 )
 
@@ -50,12 +53,12 @@ type ApplyMsg struct {
 	SnapshotIndex int
 }
 
-type RaftState int
+type RaftState string
 
 const (
-	Follower RaftState = iota
-	Candidate
-	Leader
+	Follower  RaftState = "Follower"
+	Candidate           = "Candidate"
+	Leader              = "Leader"
 )
 
 //
@@ -72,18 +75,21 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	// Persistent state on all servers: Updated on stable storage before responding to RPCs
 	currentTerm int
 	votedFor    int
-	log         Log
+	log         []Log
 
+	// Volatile state on all servers:
 	commitIndex int
 	lastApplied int
 
+	// Volatile state on leaders: (Reinitialized after election)
 	nextIndex  []int
 	matchIndex []int
 
 	state         RaftState
-	appendEntryCh chan *Entry
+	appendEntryCh chan *Log
 	heartBeat     time.Duration
 	electionTime  time.Time
 
@@ -98,6 +104,8 @@ func (rf *Raft) GetState() (int, bool) {
 	var term int
 	var isleader bool
 	// Your code here (2A).
+	term = rf.currentTerm
+	isleader
 	return term, isleader
 }
 
@@ -165,6 +173,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 //
 type RequestVoteArgs struct {
 	// Your data here (2A, 2B).
+	Term         int
+	CandidateId  int
+	LastLogIndex int
+	LastLogTerm  int
 }
 
 //
@@ -173,6 +185,8 @@ type RequestVoteArgs struct {
 //
 type RequestVoteReply struct {
 	// Your data here (2A).
+	Term        int
+	VoteGranted bool
 }
 
 //
@@ -180,6 +194,12 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	if args.Term < rf.currentTerm {
+		reply.VoteGranted = false
+	}
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && up_to_date {
+		reply.VoteGranted = true
+	}
 }
 
 //
@@ -304,7 +324,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.currentTerm = 0
 	rf.votedFor = -1
 	rf.log = makeEmptyLog()
-	// rf.log.append(Entry[-1,0,0])
 
 	rf.commitIndex = 0
 	rf.lastApplied = 0
@@ -314,6 +333,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	rf.state = Follower
 	// rf.appendEntryCh
+	// The tester requires that the leader send heartbeat RPCs no more than ten times per second.
 	rf.heartBeat = 100 * time.Millisecond
 	rf.resetElectionTimer()
 
@@ -329,4 +349,36 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	go rf.applier()
 
 	return rf
+}
+
+func (rf *Raft) resetElectionTimer() {
+	now := time.Now()
+	timeOut := time.Duration(150+rand.Intn(150)) * time.Millisecond
+	rf.electionTime = now.Add(timeOut)
+}
+
+func (rf *Raft) leaderElection() {
+	rf.currentTerm++
+	rf.votedFor=rf.me
+	rf.state = Candidate
+	rf.InitiatePoll()
+}
+
+func (rf *Raft) InitiatePoll() {
+	requestVoteArgs := RequestVoteArgs{
+		Term:         rf.currentTerm,
+		CandidateId:  rf.me,
+		LastLogIndex: rf.log[len(rf.log)-1].Index,
+		LastLogTerm:  rf.log[len(rf.log)-1].Term,
+	}
+	requestVoteReply := RequestVoteReply{}
+
+	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
+		if peerNo == rf.me {
+			continue
+		}else {
+			rf.sendRequestVote(peerNo, &requestVoteArgs, &requestVoteReply)
+		}
+	}
+	
 }
