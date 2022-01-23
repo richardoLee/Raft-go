@@ -359,26 +359,51 @@ func (rf *Raft) resetElectionTimer() {
 
 func (rf *Raft) leaderElection() {
 	rf.currentTerm++
-	rf.votedFor=rf.me
+	rf.votedFor = rf.me
 	rf.state = Candidate
-	rf.InitiatePoll()
-}
-
-func (rf *Raft) InitiatePoll() {
 	requestVoteArgs := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
 		LastLogIndex: rf.log[len(rf.log)-1].Index,
 		LastLogTerm:  rf.log[len(rf.log)-1].Term,
 	}
-	requestVoteReply := RequestVoteReply{}
 
+	voteCounter := 0;
 	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
-		if peerNo == rf.me {
-			continue
-		}else {
-			rf.sendRequestVote(peerNo, &requestVoteArgs, &requestVoteReply)
+		if peerNo != rf.me {
+			go rf.InitiatePoll(peerNo, &requestVoteArgs,&voteCounter)
 		}
+
 	}
-	
+
+
+}
+
+func (rf *Raft) InitiatePoll(peerNo int, requestVoteArgs *RequestVoteArgs, voteCounter *int) {
+
+	reply := RequestVoteReply{}
+
+	if !rf.sendRequestVote(peerNo, requestVoteArgs, &reply){
+		return;
+	}
+
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	if !reply.VoteGranted {
+		return
+	}
+	if reply.Term>requestVoteArgs.Term {
+		rf.state = Follower
+		return
+	}
+	if reply.Term<requestVoteArgs.Term {
+		return
+	}
+
+	*voteCounter++
+
+	if *voteCounter>len(rf.peers)/2 && rf.state==Candidate{
+		rf.state=Leader
+	}
+
 }
