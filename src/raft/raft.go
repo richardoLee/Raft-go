@@ -18,15 +18,16 @@ package raft
 //
 
 import (
-	"bytes"
+	// "bytes"
 	// "crypto/rand"
-	"math/big"
+	// "math/big"
 	"math/rand"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"6.824/labgob"
+	// "6.824/labgob"
 	"6.824/labrpc"
 )
 
@@ -78,7 +79,7 @@ type Raft struct {
 	// Persistent state on all servers: Updated on stable storage before responding to RPCs
 	currentTerm int
 	votedFor    int
-	log         []Log
+	log         Log
 
 	// Volatile state on all servers:
 	commitIndex int
@@ -89,7 +90,7 @@ type Raft struct {
 	matchIndex []int
 
 	state         RaftState
-	appendEntryCh chan *Log
+	appendEntryCh chan *Entry
 	heartBeat     time.Duration
 	electionTime  time.Time
 
@@ -105,7 +106,11 @@ func (rf *Raft) GetState() (int, bool) {
 	var isleader bool
 	// Your code here (2A).
 	term = rf.currentTerm
-	isleader
+
+	if rf.state == Leader {
+		isleader = true
+	}
+
 	return term, isleader
 }
 
@@ -194,11 +199,21 @@ type RequestVoteReply struct {
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	// Your code here (2A, 2B).
+	rf.resetElectionTimer()
 	if args.Term < rf.currentTerm {
 		reply.VoteGranted = false
 	}
-	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && up_to_date {
+	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm) {
 		reply.VoteGranted = true
+	}
+}
+
+func (rf *Raft) UpToDateCheck(lastLogIndex int, lastLogTerm int) bool {
+	localLastLog := rf.log.getLastLog()
+	if localLastLog.Term == lastLogTerm {
+		return lastLogIndex > localLastLog.Index
+	} else {
+		return lastLogTerm > localLastLog.Term
 	}
 }
 
@@ -292,9 +307,10 @@ func (rf *Raft) ticker() {
 		time.Sleep(rf.heartBeat)
 		rf.mu.Lock()
 		if rf.state == Leader {
-			rf.appendEntries(true)
+			// rf.appendEntries(true)
 		}
 		if time.Now().After(rf.electionTime) {
+			DPrintf("peer "+strconv.Itoa(rf.me)+" start leaderElection")
 			rf.leaderElection()
 		}
 		rf.mu.Unlock()
@@ -343,10 +359,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
 
+	DPrintf("made raft peer "+strconv.Itoa(rf.me))
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
-	go rf.applier()
+	// go rf.applier()
 
 	return rf
 }
@@ -364,46 +381,48 @@ func (rf *Raft) leaderElection() {
 	requestVoteArgs := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: rf.log[len(rf.log)-1].Index,
-		LastLogTerm:  rf.log[len(rf.log)-1].Term,
+		LastLogIndex: rf.log.getLastLog().Index,
+		LastLogTerm:  rf.log.getLastLog().Term,
 	}
 
-	voteCounter := 0;
+	DPrintf("candidate "+strconv.Itoa(rf.me)+" Election Term "+ strconv.Itoa(rf.currentTerm))
+	DPrintf("requestVoteArgs is %v",requestVoteArgs)
+	voteCounter := 1
 	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
 		if peerNo != rf.me {
-			go rf.InitiatePoll(peerNo, &requestVoteArgs,&voteCounter)
+			go rf.SendRequestToPeer(peerNo, &requestVoteArgs, &voteCounter)
 		}
-
 	}
-
-
 }
 
-func (rf *Raft) InitiatePoll(peerNo int, requestVoteArgs *RequestVoteArgs, voteCounter *int) {
+func (rf *Raft) SendRequestToPeer(peerNo int, requestVoteArgs *RequestVoteArgs, voteCounter *int) {
 
 	reply := RequestVoteReply{}
 
-	if !rf.sendRequestVote(peerNo, requestVoteArgs, &reply){
-		return;
+	DPrintf("candidate "+strconv.Itoa(rf.me)+" Send Request To Peer "+ strconv.Itoa(peerNo))
+	if !rf.sendRequestVote(peerNo, requestVoteArgs, &reply) {
+		return
 	}
+	DPrintf("candidate catch vote result %v",reply)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
 	if !reply.VoteGranted {
 		return
 	}
-	if reply.Term>requestVoteArgs.Term {
+	if reply.Term > requestVoteArgs.Term {
 		rf.state = Follower
 		return
 	}
-	if reply.Term<requestVoteArgs.Term {
+	if reply.Term < requestVoteArgs.Term {
 		return
 	}
 
 	*voteCounter++
 
-	if *voteCounter>len(rf.peers)/2 && rf.state==Candidate{
-		rf.state=Leader
+	if *voteCounter > len(rf.peers)/2 && rf.state == Candidate {
+		rf.state = Leader
 	}
 
 }
