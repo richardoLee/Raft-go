@@ -18,17 +18,17 @@ package raft
 //
 
 import (
-    // "bytes"
-    // "crypto/rand"
-    // "math/big"
-    // "math/rand"
-    "strconv"
-    "sync"
-    "sync/atomic"
-    "time"
+	// "bytes"
+	// "crypto/rand"
+	// "math/big"
+	// "math/rand"
+	"strconv"
+	"sync"
+	"sync/atomic"
+	"time"
 
-    // "6.824/labgob"
-    "6.824/labrpc"
+	// "6.824/labgob"
+	"6.824/labrpc"
 )
 
 //
@@ -43,75 +43,76 @@ import (
 // other uses.
 //
 type ApplyMsg struct {
-    CommandValid bool
-    Command      interface{}
-    CommandIndex int
+	CommandValid bool
+	Command      interface{}
+	CommandIndex int
 
-    // For 2D:
-    SnapshotValid bool
-    Snapshot      []byte
-    SnapshotTerm  int
-    SnapshotIndex int
+	// For 2D:
+	SnapshotValid bool
+	Snapshot      []byte
+	SnapshotTerm  int
+	SnapshotIndex int
 }
 
 type RaftState string
 
 const (
-    Follower  RaftState = "Follower"
-    Candidate           = "Candidate"
-    Leader              = "Leader"
+	Follower  RaftState = "Follower"
+	Candidate           = "Candidate"
+	Leader              = "Leader"
 )
 
 //
 // A Go object implementing a single Raft peer.
 //
 type Raft struct {
-    mu        sync.Mutex          // Lock to protect shared access to this peer's state
-    peers     []*labrpc.ClientEnd // RPC end points of all peers
-    persister *Persister          // Object to hold this peer's persisted state
-    me        int                 // this peer's index into peers[]
-    dead      int32               // set by Kill()
+	mu        sync.Mutex          // Lock to protect shared access to this peer's state
+	peers     []*labrpc.ClientEnd // RPC end points of all peers
+	persister *Persister          // Object to hold this peer's persisted state
+	me        int                 // this peer's index into peers[]
+	dead      int32               // set by Kill()
 
-    // Your data here (2A, 2B, 2C).
-    // Look at the paper's Figure 2 for a description of what
-    // state a Raft server must maintain.
+	// Your data here (2A, 2B, 2C).
+	// Look at the paper's Figure 2 for a description of what
+	// state a Raft server must maintain.
 
-    // Persistent state on all servers: Updated on stable storage before responding to RPCs
-    currentTerm int
-    votedFor    int
-    log         Log
+	// Persistent state on all servers: Updated on stable storage before responding to RPCs
+	currentTerm int
+	votedFor    int
+	log         Log
 
-    // Volatile state on all servers:
-    commitIndex int
-    lastApplied int
+	// Volatile state on all servers:
+	commitIndex int
+	lastApplied int
 
-    // Volatile state on leaders: (Reinitialized after election)
-    nextIndex  []int
-    matchIndex []int
+	// Volatile state on leaders: (Reinitialized after election)
+	nextIndex  []int
+	matchIndex []int
 
-    state         RaftState
-    appendEntryCh chan *Entry
-    heartBeat     time.Duration
-    electionTime  time.Time
+	state         RaftState
+	appendEntryCh chan *Entry
+	heartBeat     time.Duration
+	electionTime  time.Time
 
-    applyCh   chan ApplyMsg
-    applyCond *sync.Cond
+	applyCh   chan ApplyMsg
+	applyCond *sync.Cond
 }
 
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
+    rf.mu.Lock()
+	defer rf.mu.Unlock()
+	var term int
+	var isleader bool
+	// Your code here (2A).
+	term = rf.currentTerm
 
-    var term int
-    var isleader bool
-    // Your code here (2A).
-    term = rf.currentTerm
+	if rf.state == Leader {
+		isleader = true
+	}
 
-    if rf.state == Leader {
-        isleader = true
-    }
-
-    return term, isleader
+	return term, isleader
 }
 
 //
@@ -120,36 +121,36 @@ func (rf *Raft) GetState() (int, bool) {
 // see paper's Figure 2 for a description of what should be persistent.
 //
 func (rf *Raft) persist() {
-    // Your code here (2C).
-    // Example:
-    // w := new(bytes.Buffer)
-    // e := labgob.NewEncoder(w)
-    // e.Encode(rf.xxx)
-    // e.Encode(rf.yyy)
-    // data := w.Bytes()
-    // rf.persister.SaveRaftState(data)
+	// Your code here (2C).
+	// Example:
+	// w := new(bytes.Buffer)
+	// e := labgob.NewEncoder(w)
+	// e.Encode(rf.xxx)
+	// e.Encode(rf.yyy)
+	// data := w.Bytes()
+	// rf.persister.SaveRaftState(data)
 }
 
 //
 // restore previously persisted state.
 //
 func (rf *Raft) readPersist(data []byte) {
-    if data == nil || len(data) < 1 { // bootstrap without any state?
-        return
-    }
-    // Your code here (2C).
-    // Example:
-    // r := bytes.NewBuffer(data)
-    // d := labgob.NewDecoder(r)
-    // var xxx
-    // var yyy
-    // if d.Decode(&xxx) != nil ||
-    //    d.Decode(&yyy) != nil {
-    //   error...
-    // } else {
-    //   rf.xxx = xxx
-    //   rf.yyy = yyy
-    // }
+	if data == nil || len(data) < 1 { // bootstrap without any state?
+		return
+	}
+	// Your code here (2C).
+	// Example:
+	// r := bytes.NewBuffer(data)
+	// d := labgob.NewDecoder(r)
+	// var xxx
+	// var yyy
+	// if d.Decode(&xxx) != nil ||
+	//    d.Decode(&yyy) != nil {
+	//   error...
+	// } else {
+	//   rf.xxx = xxx
+	//   rf.yyy = yyy
+	// }
 }
 
 //
@@ -158,9 +159,9 @@ func (rf *Raft) readPersist(data []byte) {
 //
 func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int, snapshot []byte) bool {
 
-    // Your code here (2D).
+	// Your code here (2D).
 
-    return true
+	return true
 }
 
 // the service says it has created a snapshot that has
@@ -168,7 +169,7 @@ func (rf *Raft) CondInstallSnapshot(lastIncludedTerm int, lastIncludedIndex int,
 // service no longer needs the log through (and including)
 // that index. Raft should now trim its log as much as possible.
 func (rf *Raft) Snapshot(index int, snapshot []byte) {
-    // Your code here (2D).
+	// Your code here (2D).
 
 }
 
@@ -187,13 +188,13 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-    index := -1
-    term := -1
-    isLeader := true
+	index := -1
+	term := -1
+	isLeader := true
 
-    // Your code here (2B).
+	// Your code here (2B).
 
-    return index, term, isLeader
+	return index, term, isLeader
 }
 
 //
@@ -208,35 +209,35 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 // should call killed() to check whether it should stop.
 //
 func (rf *Raft) Kill() {
-    atomic.StoreInt32(&rf.dead, 1)
-    // Your code here, if desired.
+	atomic.StoreInt32(&rf.dead, 1)
+	// Your code here, if desired.
 }
 
 func (rf *Raft) killed() bool {
-    z := atomic.LoadInt32(&rf.dead)
-    return z == 1
+	z := atomic.LoadInt32(&rf.dead)
+	return z == 1
 }
 
 // The ticker go routine starts a new election if this peer hasn't received
 // heartsbeats recently.
 func (rf *Raft) ticker() {
-    for rf.killed() == false {
+	for rf.killed() == false {
 
-        // Your code here to check if a leader election should
-        // be started and to randomize sleeping time using
-        // time.Sleep().
-        time.Sleep(rf.heartBeat)
-        rf.mu.Lock()
-        if rf.state == Leader {
-            // rf.appendEntries(true)
-        }
-        if time.Now().After(rf.electionTime) {
-            DPrintf("candidate " + strconv.Itoa(rf.me) + " start leaderElection")
-            rf.leaderElection()
-            DPrintf("candidate " + strconv.Itoa(rf.me) + " finish leaderElection")
-        }
-        rf.mu.Unlock()
-    }
+		// Your code here to check if a leader election should
+		// be started and to randomize sleeping time using
+		// time.Sleep().
+		time.Sleep(rf.heartBeat)
+		rf.mu.Lock()
+		if rf.state == Leader {
+			// rf.appendEntries(true)
+		}
+		if time.Now().After(rf.electionTime) {
+			DPrintf("candidate " + strconv.Itoa(rf.me) + " start leaderElection")
+			rf.leaderElection()
+			DPrintf("candidate " + strconv.Itoa(rf.me) + " finish leaderElection")
+		}
+		rf.mu.Unlock()
+	}
 }
 
 //
@@ -251,60 +252,69 @@ func (rf *Raft) ticker() {
 // for any long-running work.
 //
 func Make(peers []*labrpc.ClientEnd, me int,
-    persister *Persister, applyCh chan ApplyMsg) *Raft {
-    rf := &Raft{}
-    rf.peers = peers
-    rf.persister = persister
-    rf.me = me
+	persister *Persister, applyCh chan ApplyMsg) *Raft {
+	rf := &Raft{}
+	rf.peers = peers
+	rf.persister = persister
+	rf.me = me
 
-    // Your initialization code here (2A, 2B, 2C).
+	// Your initialization code here (2A, 2B, 2C).
 
-    rf.currentTerm = 0
-    rf.votedFor = -1
-    rf.log = makeEmptyLog()
+	rf.currentTerm = 0
+	rf.votedFor = -1
+	rf.log = makeEmptyLog()
 
-    rf.commitIndex = 0
-    rf.lastApplied = 0
+	rf.commitIndex = 0
+	rf.lastApplied = 0
 
-    rf.nextIndex = make([]int, len(rf.peers))
-    rf.matchIndex = make([]int, len(rf.peers))
+	rf.nextIndex = make([]int, len(rf.peers))
+	rf.matchIndex = make([]int, len(rf.peers))
 
-    rf.state = Follower
-    // rf.appendEntryCh
-    // The tester requires that the leader send heartbeat RPCs no more than ten times per second.
-    rf.heartBeat = 100 * time.Millisecond
-    rf.resetElectionTimer()
+	rf.state = Follower
+	// rf.appendEntryCh
+	// The tester requires that the leader send heartbeat RPCs no more than ten times per second.
+	rf.heartBeat = 100 * time.Millisecond
+	rf.resetElectionTimer()
 
-    rf.applyCh = applyCh
-    rf.applyCond = sync.NewCond(&rf.mu)
+	rf.applyCh = applyCh
+	rf.applyCond = sync.NewCond(&rf.mu)
 
-    // initialize from state persisted before a crash
-    rf.readPersist(persister.ReadRaftState())
+	// initialize from state persisted before a crash
+	rf.readPersist(persister.ReadRaftState())
 
-    DPrintf("made raft peer " + strconv.Itoa(rf.me))
-    // start ticker goroutine to start elections
-    go rf.ticker()
+	DPrintf("made raft peer " + strconv.Itoa(rf.me))
+	// start ticker goroutine to start elections
+	go rf.ticker()
 
-    // go rf.applier()
+	// go rf.applier()
 
-    return rf
+	return rf
 }
 
 func (rf *Raft) LeaderSendEntriesToPeer(heartbeat bool) {
-    appendEntriesArgs := AppendEntriesArgs{
-        Term:         rf.currentTerm,
-        LeaderId:     rf.me,
-        PrevLogIndex: rf.log.getLastLog().Index,
-        PrevLogTerm:  rf.log.getLastLog().Term,
-        Entries:      nil,
-        LeaderCommit: rf.commitIndex,
-    }
-    appendEntriesReply := AppendEntriesReply{}
-    for {
-        for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
-            if peerNo != rf.me {
-                go rf.sendAppendEntries(peerNo, &appendEntriesArgs, &appendEntriesReply)
-            }
-        }
-    }
+	if heartbeat {
+	}
+	appendEntriesArgs := AppendEntriesArgs{
+		Term:         rf.currentTerm,
+		LeaderId:     rf.me,
+		// PrevLogIndex: rf.log.getLastLog().Index,
+		// PrevLogTerm:  rf.log.getLastLog().Term,
+		Entries:      nil,
+		LeaderCommit: rf.commitIndex,
+	}
+    // var appendEntriesReply AppendEntriesReply
+	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
+		if peerNo != rf.me {
+			go rf.sendAppendEntries(peerNo, &appendEntriesArgs)
+		}
+	}
+
+}
+
+func (rf *Raft) newTerm(term int) {
+	rf.state = Follower
+	rf.currentTerm = term
+	rf.votedFor = -1
+	DPrintf(strconv.Itoa(rf.me)+" set new term %v", rf.currentTerm)
+	// rf.persist()
 }
