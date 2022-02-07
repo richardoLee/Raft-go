@@ -7,11 +7,11 @@ import "strconv"
 // field names must start with capital letters!
 //
 type RequestVoteArgs struct {
-	// Your data here (2A, 2B).
-	Term         int
-	CandidateId  int
-	LastLogIndex int
-	LastLogTerm  int
+    // Your data here (2A, 2B).
+    Term         int
+    CandidateId  int
+    LastLogIndex int
+    LastLogTerm  int
 }
 
 //
@@ -19,41 +19,41 @@ type RequestVoteArgs struct {
 // field names must start with capital letters!
 //
 type RequestVoteReply struct {
-	// Your data here (2A).
-	Term        int
-	VoteGranted bool
+    // Your data here (2A).
+    Term        int
+    VoteGranted bool
 }
 
 //
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	// Your code here (2A, 2B).
-	rf.mu.Lock()
-	defer rf.mu.Unlock()
-	rf.resetElectionTimer()
-	DPrintf("peer "+strconv.Itoa(rf.me)+" catch args %v", args)
-	if args.Term < rf.currentTerm {
-		reply.VoteGranted = false
-	} else {
-	}
-	DPrintf("peer "+strconv.Itoa(rf.me)+" part 1= %v", (rf.votedFor == -1 || rf.votedFor == args.CandidateId))
-	DPrintf("peer "+strconv.Itoa(rf.me)+" part 2= %v", rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm))
-	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm) {
-		reply.VoteGranted = true
-	}
-	reply.Term = rf.currentTerm
-	DPrintf("peer "+strconv.Itoa(rf.me)+" reply is %v", reply)
+    // Your code here (2A, 2B).
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
+    rf.resetElectionTimer()
+    DPrintf("peer "+strconv.Itoa(rf.me)+" catch args %v", args)
+    if args.Term < rf.currentTerm {
+        reply.VoteGranted = false
+    } else {
+    }
+    DPrintf("peer "+strconv.Itoa(rf.me)+" part 1= %v", (rf.votedFor == -1 || rf.votedFor == args.CandidateId))
+    DPrintf("peer "+strconv.Itoa(rf.me)+" part 2= %v", rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm))
+    if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm) {
+        reply.VoteGranted = true
+    }
+    reply.Term = rf.currentTerm
+    DPrintf("peer "+strconv.Itoa(rf.me)+" reply is %v", reply)
 }
 
 func (rf *Raft) UpToDateCheck(lastLogIndex int, lastLogTerm int) bool {
-	localLastLog := rf.log.getLastLog()
-	// DPrintf("peer "+strconv.Itoa(rf.me)+" lastLogIndex >= localLastLog.Index %v",lastLogIndex >= localLastLog.Index)
-	if localLastLog.Term == lastLogTerm {
-		return lastLogIndex >= localLastLog.Index
-	} else {
-		return lastLogTerm > localLastLog.Term
-	}
+    localLastLog := rf.log.getLastLog()
+    // DPrintf("peer "+strconv.Itoa(rf.me)+" lastLogIndex >= localLastLog.Index %v",lastLogIndex >= localLastLog.Index)
+    if localLastLog.Term == lastLogTerm {
+        return lastLogIndex >= localLastLog.Index
+    } else {
+        return lastLogTerm > localLastLog.Term
+    }
 }
 
 //
@@ -86,8 +86,8 @@ func (rf *Raft) UpToDateCheck(lastLogIndex int, lastLogTerm int) bool {
 // the struct itself.
 //
 func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
-	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
-	return ok
+    ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+    return ok
 }
 
 
@@ -95,33 +95,33 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 
 
 type AppendEntriesArgs struct {
-	Term         int
-	LeaderId     int
-	PrevLogIndex int
+    Term         int
+    LeaderId     int
+    PrevLogIndex int
 
-	PrevLogTerm  int
-	Entries      []Entry
-	LeaderCommit int
+    PrevLogTerm  int
+    Entries      []Entry
+    LeaderCommit int
 }
 
 type AppendEntriesReply struct {
-	Term    int
-	Success bool
+    Term    int
+    Success bool
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	reply.Term=rf.currentTerm
-	
-	// if args.Term<rf.currentTerm {
-	// 	reply.Success=false
-	// }
+    reply.Term=rf.currentTerm
+    
+    // if args.Term<rf.currentTerm {
+    // 	reply.Success=false
+    // }
 
-	if args.Entries==nil {
-		rf.resetElectionTimer()
-	}
+    if args.Entries==nil {
+        rf.resetElectionTimer()
+    }
 }
 
 func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
-	return ok
+    ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
+    return ok
 }
