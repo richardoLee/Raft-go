@@ -1,6 +1,10 @@
 package raft
 
-import "log"
+import (
+	"log"
+	"time"
+	"math/rand"
+)
 
 // Debugging
 const Debug = true
@@ -10,6 +14,12 @@ func DPrintf(format string, a ...interface{}) (n int, err error) {
 		log.Printf(format, a...)
 	}
 	return
+}
+
+func (rf *Raft) resetElectionTimer() {
+	now := time.Now()
+	timeOut := time.Duration(150+rand.Intn(150)) * time.Millisecond
+	rf.electionTime = now.Add(timeOut)
 }
 
 type Log struct {
