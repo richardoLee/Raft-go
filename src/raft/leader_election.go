@@ -9,8 +9,8 @@ func (rf *Raft) leaderElection() {
 	requestVoteArgs := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
-		LastLogIndex: rf.log.getLastLog().Index,
-		LastLogTerm:  rf.log.getLastLog().Term,
+		LastLogIndex: rf.log.getLastEntry().Index,
+		LastLogTerm:  rf.log.getLastEntry().Term,
 	}
 
 	DPrintf("candidate " + strconv.Itoa(rf.me) + " Election Term " + strconv.Itoa(rf.currentTerm))
@@ -60,12 +60,12 @@ func (rf *Raft) CandidateSendRequestToPeer(peerNo int, args *RequestVoteArgs, vo
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
 
-	lastLog := rf.log.getLastLog()
+	lastLog := rf.log.getLastEntry()
 	for peerNo := range rf.peers {
 		rf.nextIndex[peerNo] = lastLog.Index + 1
 		rf.matchIndex[peerNo] = 0
 	}
-    DPrintf("candidate LeaderSendEntriesToPeer")
-	rf.LeaderSendEntriesToPeer(true)
-    
+	DPrintf("candidate LeaderSendEntriesToPeer")
+	rf.logReplication(true)
+
 }

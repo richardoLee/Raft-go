@@ -54,7 +54,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 }
 
 func (rf *Raft) UpToDateCheck(lastLogIndex int, lastLogTerm int) bool {
-	localLastLog := rf.log.getLastLog()
+	localLastLog := rf.log.getLastEntry()
 	// DPrintf("peer "+strconv.Itoa(rf.me)+" lastLogIndex >= localLastLog.Index %v",lastLogIndex >= localLastLog.Index)
 	if localLastLog.Term == lastLogTerm {
 		return lastLogIndex >= localLastLog.Index
@@ -113,22 +113,48 @@ type AppendEntriesReply struct {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-    rf.mu.Lock()
-    defer rf.mu.Unlock()
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
 	reply.Term = rf.currentTerm
 
-	// if args.Term<rf.currentTerm {
-	// 	reply.Success=false
-	// }
-
-	if args.Entries == nil {
-		rf.resetElectionTimer()
+	if args.Term < rf.currentTerm {
+		return
 	}
+
+	if args.Term > rf.currentTerm {
+		rf.newTerm(args.Term)
+		return
+	}
+
+	rf.resetElectionTimer()
+
+	if rf.state == Candidate {
+		rf.state = Follower
+	}
+
+	if rf.log.Entries[args.PrevLogIndex].Index != args.PrevLogTerm {
+		return
+	}
+
+	for idx, entry := range args.Entries {
+		if entry.Index <= rf.log.getLastEntry().Index && rf.log.Entries[entry.Index].Term != entry.Term {
+			rf.log.deleteFollowingEntry(entry.Index)
+		}
+		if entry.Index > rf.log.getLastEntry().Index {
+			rf.log.appendEntry(args.Entries[idx:]...)
+			break
+		}
+	}
+
+	if args.LeaderCommit > rf.commitIndex {
+		rf.commitIndex = min(args.LeaderCommit, rf.log.getLastEntry().Index)
+		rf.apply()
+	}
+	reply.Success = true
+
 }
 
-func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs) bool {
-    // , reply *AppendEntriesReply
-    var reply AppendEntriesReply
-	ok := rf.peers[server].Call("Raft.AppendEntries", args, &reply)
+func (rf *Raft) sendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
 }

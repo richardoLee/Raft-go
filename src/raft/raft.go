@@ -101,7 +101,7 @@ type Raft struct {
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-    rf.mu.Lock()
+	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	var term int
 	var isleader bool
@@ -189,10 +189,29 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	index := -1
-	term := -1
+	term := rf.currentTerm
 	isLeader := true
 
 	// Your code here (2B).
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	if rf.state != Leader {
+		isLeader = false
+		return index, term, isLeader
+	}
+
+	index = rf.log.getLastEntry().Index + 1
+	isLeader = true
+
+	entry := Entry{
+		Command: command,
+		Term:    term,
+		Index:   index,
+	}
+
+	rf.log.appendEntry(entry)
+	rf.logReplication(false)
 
 	return index, term, isLeader
 }
@@ -229,7 +248,7 @@ func (rf *Raft) ticker() {
 		time.Sleep(rf.heartBeat)
 		rf.mu.Lock()
 		if rf.state == Leader {
-			// rf.appendEntries(true)
+			rf.logReplication(true)
 		}
 		if time.Now().After(rf.electionTime) {
 			DPrintf("candidate " + strconv.Itoa(rf.me) + " start leaderElection")
@@ -237,6 +256,39 @@ func (rf *Raft) ticker() {
 			DPrintf("candidate " + strconv.Itoa(rf.me) + " finish leaderElection")
 		}
 		rf.mu.Unlock()
+	}
+}
+
+func (rf *Raft) newTerm(term int) {
+	rf.state = Follower
+	rf.currentTerm = term
+	rf.votedFor = -1
+	DPrintf(strconv.Itoa(rf.me)+" set new term %v", rf.currentTerm)
+	// rf.persist()
+}
+
+func (rf *Raft) apply() {
+	rf.applyCond.Broadcast()
+}
+
+func (rf *Raft) applier() {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	for !rf.killed() {
+		if rf.commitIndex > rf.lastApplied && rf.log.getLastEntry().Index > rf.lastApplied {
+			rf.lastApplied++
+			applyMsg := ApplyMsg{
+				CommandValid: true,
+				Command:      rf.log.Entries[rf.lastApplied].Command,
+				CommandIndex: rf.lastApplied,
+			}
+			rf.mu.Unlock()
+			rf.applyCh <- applyMsg
+			rf.mu.Lock()
+		} else {
+			rf.applyCond.Wait()
+		}
 	}
 }
 
@@ -286,35 +338,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	// start ticker goroutine to start elections
 	go rf.ticker()
 
-	// go rf.applier()
+	go rf.applier()
 
 	return rf
-}
-
-func (rf *Raft) LeaderSendEntriesToPeer(heartbeat bool) {
-	if heartbeat {
-	}
-	appendEntriesArgs := AppendEntriesArgs{
-		Term:         rf.currentTerm,
-		LeaderId:     rf.me,
-		// PrevLogIndex: rf.log.getLastLog().Index,
-		// PrevLogTerm:  rf.log.getLastLog().Term,
-		Entries:      nil,
-		LeaderCommit: rf.commitIndex,
-	}
-    // var appendEntriesReply AppendEntriesReply
-	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
-		if peerNo != rf.me {
-			go rf.sendAppendEntries(peerNo, &appendEntriesArgs)
-		}
-	}
-
-}
-
-func (rf *Raft) newTerm(term int) {
-	rf.state = Follower
-	rf.currentTerm = term
-	rf.votedFor = -1
-	DPrintf(strconv.Itoa(rf.me)+" set new term %v", rf.currentTerm)
-	// rf.persist()
 }
