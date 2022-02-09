@@ -42,8 +42,7 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		reply.VoteGranted = false
 		return
 	}
-	DPrintf("peer "+strconv.Itoa(rf.me)+" part 1= %v", (rf.votedFor == -1 || rf.votedFor == args.CandidateId))
-	DPrintf("peer "+strconv.Itoa(rf.me)+" part 2= %v", rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm))
+	
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateId
@@ -115,9 +114,13 @@ type AppendEntriesReply struct {
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+	
+	DPrintf("follower %v original entries are %v",rf.me,rf.log.Entries)
+	
 	reply.Term = rf.currentTerm
 
 	if args.Term < rf.currentTerm {
+		DPrintf("args.Term < rf.currentTerm return")
 		return
 	}
 
@@ -132,15 +135,22 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.state = Follower
 	}
 
-	if rf.log.Entries[args.PrevLogIndex].Index != args.PrevLogTerm {
+	if rf.log.getLastEntry().Index<args.PrevLogIndex {
+		return
+	}
+
+	if rf.log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm {
+		DPrintf("rf.log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm")
 		return
 	}
 
 	for idx, entry := range args.Entries {
 		if entry.Index <= rf.log.getLastEntry().Index && rf.log.Entries[entry.Index].Term != entry.Term {
+			DPrintf("rf.log.deleteFollowingEntry(entry.Index)")
 			rf.log.deleteFollowingEntry(entry.Index)
 		}
 		if entry.Index > rf.log.getLastEntry().Index {
+			DPrintf("rf.log.appendEntry(args.Entries[idx:]...)")
 			rf.log.appendEntry(args.Entries[idx:]...)
 			break
 		}
@@ -151,6 +161,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.apply()
 	}
 	reply.Success = true
+	DPrintf("follower %v entries become %v",rf.me,rf.log.Entries)
 
 }
 

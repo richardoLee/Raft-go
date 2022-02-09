@@ -29,6 +29,7 @@ func (rf *Raft) CandidateSendRequestToPeer(peerNo int, args *RequestVoteArgs, vo
 
 	DPrintf("candidate " + strconv.Itoa(rf.me) + " Send Request To Peer " + strconv.Itoa(peerNo))
 	if !rf.sendRequestVote(peerNo, args, &reply) {
+		DPrintf("Send Request To Peer %v fail ", strconv.Itoa(peerNo))
 		return
 	}
 	DPrintf("candidate catch vote result %v", reply)
@@ -52,20 +53,19 @@ func (rf *Raft) CandidateSendRequestToPeer(peerNo int, args *RequestVoteArgs, vo
 	if *voteCounter > len(rf.peers)/2 && rf.state == Candidate && rf.currentTerm == args.Term {
 		rf.becomeLeader()
 	}
-
-	DPrintf("candidate rf.state %v", rf.state)
-
 }
 
 func (rf *Raft) becomeLeader() {
 	rf.state = Leader
+
+	DPrintf("candidate %v become %v", rf.me, rf.state)
 
 	lastLog := rf.log.getLastEntry()
 	for peerNo := range rf.peers {
 		rf.nextIndex[peerNo] = lastLog.Index + 1
 		rf.matchIndex[peerNo] = 0
 	}
-	DPrintf("candidate LeaderSendEntriesToPeer")
+	DPrintf("candidate logReplication")
 	rf.logReplication(true)
 
 }

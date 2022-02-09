@@ -1,6 +1,11 @@
 package raft
 
 func (rf *Raft) logReplication(heartbeat bool) {
+    DPrintf("leader %v entries %v",rf.me,rf.log.Entries)
+    DPrintf("leader %v nextIndex %v",rf.me,rf.nextIndex)
+    DPrintf("leader %v matchIndex %v",rf.me,rf.matchIndex)
+    DPrintf("leader %v commitIndex %v",rf.me,rf.commitIndex)
+
 	lastLog := rf.log.getLastEntry()
 
 	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
@@ -19,6 +24,7 @@ func (rf *Raft) logReplication(heartbeat bool) {
 					Entries:      rf.log.getAppenedEntries(nextIndex),
 					LeaderCommit: rf.commitIndex,
 				}
+                DPrintf("peerNo %v appendEntriesArgs Entries are %v",peerNo,appendEntriesArgs.Entries)
 
 				go rf.LeaderSendEntriesToPeer(peerNo, &appendEntriesArgs)
 			}
@@ -31,6 +37,7 @@ func (rf *Raft) LeaderSendEntriesToPeer(peerNo int, args *AppendEntriesArgs) {
 	if !rf.sendAppendEntries(peerNo, args, &reply) {
 		return
 	}
+    DPrintf("peerNo %v reply is %v",peerNo,reply)
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 	if reply.Term > rf.currentTerm {
