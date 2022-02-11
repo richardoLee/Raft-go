@@ -3,4 +3,4 @@
 /pbservice/x.txt
 /kvpaxos/x.txt
 *.so
-/raft/out
+/raft/out*

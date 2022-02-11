@@ -1,10 +1,10 @@
 package raft
 
 func (rf *Raft) logReplication(heartbeat bool) {
-    DPrintf("leader %v entries %v",rf.me,rf.log.Entries)
-    DPrintf("leader %v nextIndex %v",rf.me,rf.nextIndex)
-    DPrintf("leader %v matchIndex %v",rf.me,rf.matchIndex)
-    DPrintf("leader %v commitIndex %v",rf.me,rf.commitIndex)
+	DPrintf("leader %v entries %v", rf.me, rf.log.Entries)
+	DPrintf("leader %v nextIndex %v", rf.me, rf.nextIndex)
+	DPrintf("leader %v matchIndex %v", rf.me, rf.matchIndex)
+	DPrintf("leader %v commitIndex %v", rf.me, rf.commitIndex)
 
 	lastLog := rf.log.getLastEntry()
 
@@ -12,7 +12,7 @@ func (rf *Raft) logReplication(heartbeat bool) {
 		if peerNo == rf.me {
 			rf.resetElectionTimer()
 		} else {
-			if lastLog.Index >= rf.nextIndex[peerNo] || heartbeat {
+			if lastLog.Index > rf.nextIndex[peerNo] || heartbeat {
 				nextIndex := rf.nextIndex[peerNo]
 				prevLog := rf.log.Entries[nextIndex-1]
 
@@ -24,7 +24,7 @@ func (rf *Raft) logReplication(heartbeat bool) {
 					Entries:      rf.log.getAppenedEntries(nextIndex),
 					LeaderCommit: rf.commitIndex,
 				}
-                DPrintf("peerNo %v appendEntriesArgs Entries are %v",peerNo,appendEntriesArgs.Entries)
+				DPrintf("peerNo %v appendEntriesArgs Entries are %v", peerNo, appendEntriesArgs.Entries)
 
 				go rf.LeaderSendEntriesToPeer(peerNo, &appendEntriesArgs)
 			}
@@ -37,19 +37,33 @@ func (rf *Raft) LeaderSendEntriesToPeer(peerNo int, args *AppendEntriesArgs) {
 	if !rf.sendAppendEntries(peerNo, args, &reply) {
 		return
 	}
-    DPrintf("peerNo %v reply is %v",peerNo,reply)
+	DPrintf("peerNo %v reply is %v", peerNo, reply)
+
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
+
 	if reply.Term > rf.currentTerm {
 		rf.newTerm(reply.Term)
 		return
 	}
+
 	if args.Term == rf.currentTerm {
 		if reply.Success {
 			matchIdx := args.PrevLogIndex + len(args.Entries)
 			rf.matchIndex[peerNo] = max(rf.matchIndex[peerNo], matchIdx)
 			nextIdx := matchIdx + 1
 			rf.nextIndex[peerNo] = max(rf.nextIndex[peerNo], nextIdx)
+		} else if reply.Conflict {
+			if reply.ConflictTerm != -1 {
+				lastIndex := rf.log.searchLastIndexInTerm(reply.ConflictTerm)
+				if lastIndex > 0 {
+					rf.nextIndex[peerNo] = lastIndex
+				} else {
+					rf.nextIndex[peerNo] = reply.ConflictIndex
+				}
+			} else {
+				rf.nextIndex[peerNo] = reply.ConflictIndex
+			}
 		} else if rf.nextIndex[peerNo] > 1 {
 			rf.nextIndex[peerNo]--
 		}

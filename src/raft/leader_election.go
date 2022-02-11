@@ -6,6 +6,8 @@ func (rf *Raft) leaderElection() {
 	rf.currentTerm++
 	rf.votedFor = rf.me
 	rf.state = Candidate
+	rf.persist()
+
 	requestVoteArgs := RequestVoteArgs{
 		Term:         rf.currentTerm,
 		CandidateId:  rf.me,
@@ -13,8 +15,8 @@ func (rf *Raft) leaderElection() {
 		LastLogTerm:  rf.log.getLastEntry().Term,
 	}
 
-	DPrintf("candidate " + strconv.Itoa(rf.me) + " Election Term " + strconv.Itoa(rf.currentTerm))
-	DPrintf("requestVoteArgs is %v", requestVoteArgs)
+	// DPrintf("candidate " + strconv.Itoa(rf.me) + " Election Term " + strconv.Itoa(rf.currentTerm))
+	// DPrintf("requestVoteArgs is %v", requestVoteArgs)
 	voteCounter := 1
 	for peerNo := 0; peerNo < len(rf.peers); peerNo++ {
 		if peerNo != rf.me {
@@ -27,12 +29,12 @@ func (rf *Raft) CandidateSendRequestToPeer(peerNo int, args *RequestVoteArgs, vo
 
 	reply := RequestVoteReply{}
 
-	DPrintf("candidate " + strconv.Itoa(rf.me) + " Send Request To Peer " + strconv.Itoa(peerNo))
+	// DPrintf("candidate " + strconv.Itoa(rf.me) + " Send Request To Peer " + strconv.Itoa(peerNo))
 	if !rf.sendRequestVote(peerNo, args, &reply) {
 		DPrintf("Send Request To Peer %v fail ", strconv.Itoa(peerNo))
 		return
 	}
-	DPrintf("candidate catch vote result %v", reply)
+	// DPrintf("candidate catch vote result %v", reply)
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
@@ -65,7 +67,7 @@ func (rf *Raft) becomeLeader() {
 		rf.nextIndex[peerNo] = lastLog.Index + 1
 		rf.matchIndex[peerNo] = 0
 	}
-	DPrintf("candidate logReplication")
+	// DPrintf("candidate logReplication")
 	rf.logReplication(true)
 
 }

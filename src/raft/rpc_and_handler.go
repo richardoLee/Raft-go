@@ -1,6 +1,6 @@
 package raft
 
-import "strconv"
+// import "strconv"
 
 //
 // example RequestVote RPC arguments structure.
@@ -36,25 +36,25 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 		rf.newTerm(args.Term)
 	}
 
-	DPrintf("peer "+strconv.Itoa(rf.me)+" catch args %v", args)
+	// DPrintf("peer "+strconv.Itoa(rf.me)+" catch args %v", args)
 	if args.Term < rf.currentTerm {
 		reply.Term = rf.currentTerm
-		reply.VoteGranted = false
 		return
 	}
-	
+
 	if (rf.votedFor == -1 || rf.votedFor == args.CandidateId) && rf.UpToDateCheck(args.LastLogIndex, args.LastLogTerm) {
 		reply.VoteGranted = true
 		rf.votedFor = args.CandidateId
+		rf.persist()
 		rf.resetElectionTimer()
 	}
 	reply.Term = rf.currentTerm
-	DPrintf("peer "+strconv.Itoa(rf.me)+" reply is %v", reply)
+	// DPrintf("peer "+strconv.Itoa(rf.me)+" reply is %v", reply)
 }
 
 func (rf *Raft) UpToDateCheck(lastLogIndex int, lastLogTerm int) bool {
 	localLastLog := rf.log.getLastEntry()
-	// DPrintf("peer "+strconv.Itoa(rf.me)+" lastLogIndex >= localLastLog.Index %v",lastLogIndex >= localLastLog.Index)
+	
 	if localLastLog.Term == lastLogTerm {
 		return lastLogIndex >= localLastLog.Index
 	} else {
@@ -107,16 +107,17 @@ type AppendEntriesArgs struct {
 }
 
 type AppendEntriesReply struct {
-	Term    int
-	Success bool
+	Term          int
+	Success       bool
+	Conflict      bool
+	ConflictTerm  int
+	ConflictIndex int
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	
-	DPrintf("follower %v original entries are %v",rf.me,rf.log.Entries)
-	
+
 	reply.Term = rf.currentTerm
 
 	if args.Term < rf.currentTerm {
@@ -135,12 +136,18 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.state = Follower
 	}
 
-	if rf.log.getLastEntry().Index<args.PrevLogIndex {
+	if rf.log.getLastEntry().Index < args.PrevLogIndex {
+		reply.Conflict = true
+		reply.ConflictIndex = len(rf.log.Entries)
+		reply.ConflictTerm = -1
 		return
 	}
 
 	if rf.log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm {
 		DPrintf("rf.log.Entries[args.PrevLogIndex].Term != args.PrevLogTerm")
+		reply.Conflict = true
+		reply.ConflictTerm = rf.log.Entries[args.PrevLogIndex].Term
+		reply.ConflictIndex = rf.log.searchFirstIndex(reply.ConflictTerm)
 		return
 	}
 
@@ -148,10 +155,11 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		if entry.Index <= rf.log.getLastEntry().Index && rf.log.Entries[entry.Index].Term != entry.Term {
 			DPrintf("rf.log.deleteFollowingEntry(entry.Index)")
 			rf.log.deleteFollowingEntry(entry.Index)
+			rf.persist()
 		}
 		if entry.Index > rf.log.getLastEntry().Index {
-			DPrintf("rf.log.appendEntry(args.Entries[idx:]...)")
 			rf.log.appendEntry(args.Entries[idx:]...)
+			rf.persist()
 			break
 		}
 	}
@@ -161,7 +169,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.apply()
 	}
 	reply.Success = true
-	DPrintf("follower %v entries become %v",rf.me,rf.log.Entries)
+	DPrintf("follower %v entries become %v", rf.me, rf.log.Entries)
 
 }
 

@@ -74,3 +74,24 @@ func (l *Log) getAppenedEntries(nextIndex int) []Entry {
 func (l *Log) deleteFollowingEntry(index int) {
 	l.Entries = l.Entries[:index]
 }
+
+func (l *Log) searchFirstIndex(conflictTerm int) int{
+	firstIndex:=0
+	for _, entry := range l.Entries {
+		if entry.Term==conflictTerm {
+			firstIndex=entry.Index
+			break
+		}
+	}
+	return firstIndex
+}
+
+func(l *Log) searchLastIndexInTerm(conflictTerm int)  int{
+	lastIndex:=-1
+	for i := len(l.Entries)-1; i >=1 ; i-- {
+		if l.Entries[i-1].Term==conflictTerm {
+			lastIndex=l.Entries[i].Index
+		}
+	}
+	return lastIndex
+}
